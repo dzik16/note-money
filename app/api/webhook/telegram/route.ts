@@ -40,11 +40,53 @@ export async function POST(req: NextRequest) {
     // 1. Look up username linked to this chatId
     const username = await googleSheets.getTelegramUsername(chatId);
 
-    // 2. Check for register command: /start [username] or /register [username]
-    const startMatch = text.match(/^\/(?:start|register)\s+(\S+)/i);
+    // 2. Check for start/register commands and redirect them to register-username
+    const isStartOrRegister = text.startsWith('/start') || text.startsWith('/register');
+    if (isStartOrRegister && !text.startsWith('/register-username')) {
+      replyText = `Gunakan perintah \`/register-username <username>\` untuk mendaftarkan akun Anda. 🤖\n\nContoh: \`/register-username budi\``;
+      await sendTelegramMessage(chatId, replyText);
+      return NextResponse.json({ success: true, reply: replyText, username: null });
+    }
 
-    if (startMatch) {
-      const requestedUsername = startMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
+    // Check for register-username command
+    if (text.startsWith('/register-username')) {
+      const registerMatch = text.match(/^\/register-username(?:\s+(\S+))?/i);
+      const requestedUsername = (registerMatch?.[1] || '').trim().toLowerCase();
+
+      if (!requestedUsername) {
+        replyText = `Format salah. Gunakan: /register-username <username>`;
+        await sendTelegramMessage(chatId, replyText);
+        return NextResponse.json({ success: true, reply: replyText, username: null });
+      }
+
+      if (requestedUsername.length > 31) {
+        replyText = `Username tidak valid. Nama maksimal 31 karakter.`;
+        await sendTelegramMessage(chatId, replyText);
+        return NextResponse.json({ success: true, reply: replyText, username: null });
+      }
+
+      const invalidChars = requestedUsername.match(/[*?:/\\\[\]]/);
+      if (invalidChars) {
+        replyText = `Username tidak valid. Hindari karakter khusus (*, ?, :, /, \\, [, ]).`;
+        await sendTelegramMessage(chatId, replyText);
+        return NextResponse.json({ success: true, reply: replyText, username: null });
+      }
+
+      if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(requestedUsername)) {
+        replyText = `Username tidak valid. Gunakan huruf, angka, underscore, atau tanda hubung.`;
+        await sendTelegramMessage(chatId, replyText);
+        return NextResponse.json({ success: true, reply: replyText, username: null });
+      }
+
+      // Check if username taken
+      const taken = await googleSheets.isUsernameTaken(requestedUsername, chatId);
+      if (taken) {
+        replyText = `Username sudah digunakan. Silakan gunakan username lain.`;
+        await sendTelegramMessage(chatId, replyText);
+        return NextResponse.json({ success: true, reply: replyText, username: null });
+      }
+
+      // Link chat
       await googleSheets.linkTelegramChat(chatId, requestedUsername);
       replyText = `Registrasi berhasil! 🎉\n\nAkun Telegram Anda sekarang terhubung dengan username: *${requestedUsername}*.\n\nAnda dapat mulai mencatat keuangan Anda dengan mengirimkan chat berupa nominal dan catatan, contoh:\n• 50rb makan siang\n• nabung 1jt\n• Cash 300rb\n• gaji 5.5jt`;
       
@@ -82,9 +124,17 @@ export async function POST(req: NextRequest) {
 
     // 4. If no username resolved (not registered and no valid keyword prefix routing)
     if (!resolvedUsername) {
-      replyText = `Halo! Akun Telegram Anda belum terhubung ke sistem. ⚠️\n\nSilakan ketik \`/start <username>\` untuk menghubungkan akun Anda.\n\nContoh: \`/start budi\``;
+      replyText = `Halo! Akun Telegram Anda belum terhubung ke sistem. ⚠️\n\nSilakan daftarkan terlebih dahulu menggunakan perintah \`/register-username <username>\` untuk menghubungkan akun Anda.\n\nContoh: \`/register-username budi\``;
       await sendTelegramMessage(chatId, replyText);
       return NextResponse.json({ success: true, reply: replyText, username: null });
+    }
+
+    // Verify if resolvedUsername sheet exists
+    const sheetExists = await googleSheets.checkSheetExists(resolvedUsername);
+    if (!sheetExists) {
+      replyText = `Username "${resolvedUsername}" belum terdaftar. Silakan daftarkan terlebih dahulu menggunakan perintah \`/register-username ${resolvedUsername}\` ⚠️`;
+      await sendTelegramMessage(chatId, replyText);
+      return NextResponse.json({ success: true, reply: replyText, username: resolvedUsername });
     }
 
     if (isImageAttachment) {

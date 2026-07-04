@@ -177,11 +177,30 @@ export const mockDb = {
   linkTelegramChat(chatId: string, username: string): void {
     const db = initDb();
     db.telegramMapping[chatId] = username;
+    // When linking chat, make sure the transactions array is initialized to simulate sheet tab creation!
+    if (!db.transactions[username]) {
+      db.transactions[username] = [];
+    }
     saveDb(db);
   },
 
   getTelegramUsername(chatId: string): string | null {
     const db = initDb();
     return db.telegramMapping[chatId] || null;
+  },
+
+  checkSheetExists(username: string): boolean {
+    const db = initDb();
+    return !!db.transactions[username];
+  },
+
+  isUsernameTaken(username: string, currentChatId: string): boolean {
+    const db = initDb();
+    for (const [cid, uname] of Object.entries(db.telegramMapping)) {
+      if (uname === username && cid !== currentChatId) {
+        return true;
+      }
+    }
+    return false;
   },
 };

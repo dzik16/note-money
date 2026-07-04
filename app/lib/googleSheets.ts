@@ -417,4 +417,52 @@ export const googleSheets = {
       return mockDb.getTelegramUsername(chatId);
     }
   },
+
+  async checkSheetExists(sheetTitle: string): Promise<boolean> {
+    if (!isSheetsConfigured()) {
+      return mockDb.checkSheetExists(sheetTitle);
+    }
+
+    try {
+      const sheets = getSheetsClient();
+      const meta = await sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+      const sheetExists = meta.data.sheets?.some(
+        (s: any) => s.properties?.title === sheetTitle
+      );
+      return !!sheetExists;
+    } catch (error: any) {
+      console.error(`Error checking sheet ${sheetTitle} exists, falling back:`, error.message);
+      return mockDb.checkSheetExists(sheetTitle);
+    }
+  },
+
+  async isUsernameTaken(username: string, currentChatId: string): Promise<boolean> {
+    if (!isSheetsConfigured()) {
+      return mockDb.isUsernameTaken(username, currentChatId);
+    }
+
+    try {
+      const sheets = getSheetsClient();
+      const sheetTitle = '_telegram_users';
+      await ensureSheetExists(sheets, SPREADSHEET_ID, sheetTitle, ['ChatID', 'Username']);
+
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetTitle}!A:B`,
+      });
+
+      const rows = response.data.values || [];
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][1] === username && rows[i][0] !== currentChatId) {
+          return true;
+        }
+      }
+      return false;
+    } catch (error: any) {
+      console.error(`Error checking username taken, falling back:`, error.message);
+      return mockDb.isUsernameTaken(username, currentChatId);
+    }
+  },
 };

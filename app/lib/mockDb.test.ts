@@ -69,4 +69,15 @@ describe('mockDb', () => {
     expect(mockDb.getTelegramUsername('987654')).toBe('john_doe');
     expect(mockDb.getTelegramUsername('111111')).toBeNull();
   });
+
+  it('should check if a sheet exists and if a username is taken by another ChatID', () => {
+    expect(mockDb.checkSheetExists('budi')).toBe(false);
+    
+    mockDb.linkTelegramChat('12345', 'budi');
+    expect(mockDb.checkSheetExists('budi')).toBe(true);
+
+    expect(mockDb.isUsernameTaken('budi', '12345')).toBe(false); // same ChatID
+    expect(mockDb.isUsernameTaken('budi', '67890')).toBe(true);  // different ChatID
+    expect(mockDb.isUsernameTaken('unknown_user', '67890')).toBe(false);
+  });
 });
