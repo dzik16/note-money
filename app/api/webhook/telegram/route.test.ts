@@ -188,6 +188,7 @@ describe('Telegram Webhook Route Handler', () => {
       tipe: 'Pengeluaran',
       nominal: 50000,
       deskripsi: 'Makan siang',
+      isFallback: false,
     });
 
     const req = createMockRequest({
