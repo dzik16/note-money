@@ -11,7 +11,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const stats = await googleSheets.getStats(username);
+    const { searchParams } = new URL(req.url);
+    const filterParam = searchParams.get('filter') || 'bulanan';
+    const filter = (['harian', 'bulanan', 'tahunan'].includes(filterParam)
+      ? filterParam
+      : 'bulanan') as 'harian' | 'bulanan' | 'tahunan';
+
+    const stats = await googleSheets.getStats(username, filter);
 
     return NextResponse.json({
       success: true,
