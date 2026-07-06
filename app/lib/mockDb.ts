@@ -126,7 +126,10 @@ export const mockDb = {
     return newTx;
   },
 
-  getStats(username: string) {
+  getStats(
+    username: string,
+    filter: 'harian' | 'bulanan' | 'tahunan' = 'bulanan'
+  ): { totalPemasukan: number; totalPengeluaran: number; saldo: number; chartData: any[] } {
     const db = initDb();
     const list = db.transactions[username] || [];
 
@@ -143,28 +146,44 @@ export const mockDb = {
 
     const saldo = totalPemasukan - totalPengeluaran;
 
-    // Grouping by date for chart (last 7 days containing transactions)
-    const dailyMap: { [date: string]: { pemasukan: number; pengeluaran: number } } = {};
+    // Grouping by date for chart based on selected filter
+    const map: { [date: string]: { pemasukan: number; pengeluaran: number } } = {};
     for (const t of list) {
-      const dateOnly = t.tanggal.split(' ')[0]; // YYYY-MM-DD
-      if (!dailyMap[dateOnly]) {
-        dailyMap[dateOnly] = { pemasukan: 0, pengeluaran: 0 };
+      if (!t.tanggal) continue;
+      let key = '';
+      if (filter === 'harian') {
+        key = t.tanggal.split(' ')[0]; // YYYY-MM-DD
+      } else if (filter === 'tahunan') {
+        key = t.tanggal.substring(0, 4); // YYYY
+      } else {
+        key = t.tanggal.substring(0, 7); // YYYY-MM (default)
+      }
+
+      if (!map[key]) {
+        map[key] = { pemasukan: 0, pengeluaran: 0 };
       }
       if (t.tipe === 'Pemasukan') {
-        dailyMap[dateOnly].pemasukan += t.nominal;
+        map[key].pemasukan += t.nominal;
       } else {
-        dailyMap[dateOnly].pengeluaran += t.nominal;
+        map[key].pengeluaran += t.nominal;
       }
     }
 
-    const chartData = Object.keys(dailyMap)
+    let chartData = Object.keys(map)
       .sort()
       .map((date) => ({
         date,
-        pemasukan: dailyMap[date].pemasukan,
-        pengeluaran: dailyMap[date].pengeluaran,
-      }))
-      .slice(-7); // Keep last 7 active days
+        pemasukan: map[date].pemasukan,
+        pengeluaran: map[date].pengeluaran,
+      }));
+
+    if (filter === 'harian') {
+      chartData = chartData.slice(-7);
+    } else if (filter === 'tahunan') {
+      chartData = chartData.slice(-10); // Keep last 10 years
+    } else {
+      chartData = chartData.slice(-12); // Keep last 12 months
+    }
 
     return {
       totalPemasukan,
