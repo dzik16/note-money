@@ -68,6 +68,7 @@ export default function DashboardPage() {
   // Filters State
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [chartFilter, setChartFilter] = useState<'harian' | 'bulanan' | 'tahunan'>('bulanan');
 
   // Form State
   const [tipe, setTipe] = useState<'Pemasukan' | 'Pengeluaran'>('Pengeluaran');
@@ -90,10 +91,11 @@ export default function DashboardPage() {
   ]);
 
   // Fetch Stats
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (filterOverride?: 'harian' | 'bulanan' | 'tahunan') => {
     setLoadingStats(true);
+    const filterToUse = filterOverride || chartFilter;
     try {
-      const response = await fetch('/api/stats');
+      const response = await fetch(`/api/stats?filter=${filterToUse}`);
       const data = await response.json();
       if (response.ok) {
         setStats({
@@ -110,7 +112,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false);
     }
-  }, []);
+  }, [chartFilter]);
 
   // Fetch Transactions List
   const fetchTransactions = useCallback(async (targetPage = 1) => {
@@ -149,6 +151,12 @@ export default function DashboardPage() {
   const refreshData = () => {
     fetchStats();
     fetchTransactions(page);
+  };
+
+  // Handle Chart Filter Change
+  const handleFilterChange = (newFilter: 'harian' | 'bulanan' | 'tahunan') => {
+    setChartFilter(newFilter);
+    fetchStats(newFilter);
   };
 
   // Handle Add Transaction Form Submit
@@ -412,19 +420,39 @@ export default function DashboardPage() {
 
           {/* CUSTOM SVG GRAPH / CHART */}
           <div className="rounded-2xl bg-gray-900/40 border border-gray-800 p-6 backdrop-blur-sm shadow-md">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
-                <h3 className="text-base font-bold text-white">Grafik Transaksi Harian</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Perbandingan pemasukan & pengeluaran 7 hari terakhir</p>
+                <h3 className="text-base font-bold text-white">Grafik Tren Transaksi</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {chartFilter === 'harian' && 'Perbandingan pemasukan & pengeluaran 7 hari terakhir'}
+                  {chartFilter === 'bulanan' && 'Perbandingan pemasukan & pengeluaran bulanan'}
+                  {chartFilter === 'tahunan' && 'Perbandingan pemasukan & pengeluaran tahunan'}
+                </p>
               </div>
-              <button
-                onClick={refreshData}
-                className="p-2 rounded-lg bg-gray-950 border border-gray-850 hover:bg-gray-900 hover:text-white transition-all text-gray-400 text-xs flex items-center gap-1.5"
-                title="Refresh Grafik"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Refresh
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex bg-gray-950 p-1 rounded-xl border border-gray-850">
+                  {(['harian', 'bulanan', 'tahunan'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => handleFilterChange(filter)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize cursor-pointer ${
+                        chartFilter === filter
+                          ? 'bg-emerald-500 text-gray-950 shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={refreshData}
+                  className="p-2.5 rounded-xl bg-gray-950 border border-gray-850 hover:bg-gray-900 hover:text-white transition-all text-gray-400 text-xs flex items-center justify-center cursor-pointer"
+                  title="Refresh Grafik"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {loadingStats ? (
@@ -461,12 +489,17 @@ export default function DashboardPage() {
                     const incomeY = 155 - incomeHeight;
                     const expenseY = 155 - expenseHeight;
 
-                    // Day formats (YYYY-MM-DD -> DD/MM)
+                    // Day, Month, or Year formatting
                     let displayDate = item.date;
+                    const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
                     try {
                       const parts = item.date.split('-');
                       if (parts.length === 3) {
                         displayDate = `${parts[2]}/${parts[1]}`;
+                      } else if (parts.length === 2) {
+                        const yearShort = parts[0].substring(2);
+                        const monthIdx = parseInt(parts[1]) - 1;
+                        displayDate = `${MONTHS_SHORT[monthIdx]} '${yearShort}`;
                       }
                     } catch (e) {}
 
@@ -503,7 +536,27 @@ export default function DashboardPage() {
                         </text>
 
                         {/* Tooltip detail (overlay indicator on hover) */}
-                        <title>{`Tanggal: ${item.date}\nPemasukan: ${formatIDR(item.pemasukan)}\nPengeluaran: ${formatIDR(item.pengeluaran)}`}</title>
+                        <title>{(() => {
+                          let tooltipLabel = '';
+                          if (chartFilter === 'harian') {
+                            tooltipLabel = `Tanggal: ${item.date}`;
+                          } else if (chartFilter === 'tahunan') {
+                            tooltipLabel = `Tahun: ${item.date}`;
+                          } else {
+                            try {
+                              const parts = item.date.split('-');
+                              const monthIdx = parseInt(parts[1]) - 1;
+                              const fullMonths = [
+                                'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                                'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                              ];
+                              tooltipLabel = `Bulan: ${fullMonths[monthIdx]} ${parts[0]}`;
+                            } catch (e) {
+                              tooltipLabel = `Bulan: ${item.date}`;
+                            }
+                          }
+                          return `${tooltipLabel}\nPemasukan: ${formatIDR(item.pemasukan)}\nPengeluaran: ${formatIDR(item.pengeluaran)}`;
+                        })()}</title>
                       </g>
                     );
                   })}
