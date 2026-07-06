@@ -163,7 +163,7 @@ describe('Gemini NLP Live Evaluation Suite', () => {
           });
         }
       } catch (err: any) {
-        if (err.message && err.message.includes('HTTP 429')) {
+        if (err.message && (err.message.includes('HTTP 429') || err.message.includes('HTTP 503') || err.message.includes('HTTP 500'))) {
           rateLimited = true;
         }
         failures.push({
