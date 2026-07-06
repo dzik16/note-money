@@ -69,6 +69,7 @@ export default function DashboardPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [chartFilter, setChartFilter] = useState<'harian' | 'bulanan' | 'tahunan'>('bulanan');
+  const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(null);
 
   // Form State
   const [tipe, setTipe] = useState<'Pemasukan' | 'Pengeluaran'>('Pengeluaran');
@@ -467,7 +468,11 @@ export default function DashboardPage() {
             ) : (
               <div className="w-full relative">
                 {/* SVG Visual Chart */}
-                <svg viewBox="0 0 500 200" className="w-full h-[220px] overflow-visible">
+                <svg
+                  viewBox="0 0 500 200"
+                  className="w-full h-[220px] overflow-visible"
+                  onMouseLeave={() => setActiveTooltipIndex(null)}
+                >
                   {/* Grid Lines */}
                   <line x1="40" y1="20" x2="480" y2="20" stroke="#1f2937" strokeDasharray="3,3" />
                   <line x1="40" y1="65" x2="480" y2="65" stroke="#1f2937" strokeDasharray="3,3" />
@@ -503,8 +508,17 @@ export default function DashboardPage() {
                       }
                     } catch (e) {}
 
+                    // Hide tooltip if both income and expense are 0
+                    const hasData = item.pemasukan > 0 || item.pengeluaran > 0;
+
                     return (
-                      <g key={item.date} className="group">
+                      <g
+                        key={item.date}
+                        className="group"
+                        onMouseEnter={() => hasData && setActiveTooltipIndex(index)}
+                        onMouseLeave={() => setActiveTooltipIndex(null)}
+                        onTouchStart={() => hasData && setActiveTooltipIndex(index)}
+                      >
                         {/* Income Bar (Green) */}
                         <rect
                           x={x}
@@ -534,15 +548,46 @@ export default function DashboardPage() {
                         >
                           {displayDate}
                         </text>
+                      </g>
+                    );
+                  })}
+                </svg>
 
-                        {/* Tooltip detail (overlay indicator on hover) */}
-                        <title>{(() => {
-                          let tooltipLabel = '';
-                          if (chartFilter === 'harian') {
-                            tooltipLabel = `Tanggal: ${item.date}`;
-                          } else if (chartFilter === 'tahunan') {
-                            tooltipLabel = `Tahun: ${item.date}`;
-                          } else {
+                {/* Floating Interactive HTML Tooltip Overlay */}
+                {activeTooltipIndex !== null && stats.chartData[activeTooltipIndex] && (
+                  (() => {
+                    const item = stats.chartData[activeTooltipIndex];
+                    const totalDays = stats.chartData.length;
+                    const xSpacing = 440 / totalDays;
+                    const barCenter = 50 + activeTooltipIndex * xSpacing + (xSpacing * 0.65) / 2;
+                    const leftPercent = (barCenter / 500) * 100;
+
+                    // Edge boundary shift prevention
+                    let translateX = '-translate-x-1/2';
+                    let tooltipLeft: string | undefined = `${leftPercent}%`;
+                    let tooltipRight: string | undefined = undefined;
+
+                    if (activeTooltipIndex === 0) {
+                      tooltipLeft = '10px';
+                      translateX = 'translate-x-0';
+                    } else if (activeTooltipIndex === totalDays - 1) {
+                      tooltipLeft = 'auto';
+                      tooltipRight = '10px';
+                      translateX = 'translate-x-0';
+                    }
+
+                    return (
+                      <div
+                        className={`absolute bottom-[200px] z-50 bg-gray-950/95 border border-gray-800 p-3 rounded-xl shadow-xl backdrop-blur-md text-[11px] min-w-[140px] pointer-events-none transition-all duration-150 ease-out opacity-100 ${translateX}`}
+                        style={{
+                          left: tooltipLeft,
+                          right: tooltipRight,
+                        }}
+                      >
+                        <div className="text-gray-400 font-semibold mb-1.5 border-b border-gray-800/80 pb-1 text-center">
+                          {chartFilter === 'harian' && `Tanggal: ${item.date}`}
+                          {chartFilter === 'tahunan' && `Tahun: ${item.date}`}
+                          {chartFilter === 'bulanan' && (() => {
                             try {
                               const parts = item.date.split('-');
                               const monthIdx = parseInt(parts[1]) - 1;
@@ -550,17 +595,24 @@ export default function DashboardPage() {
                                 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                                 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
                               ];
-                              tooltipLabel = `Bulan: ${fullMonths[monthIdx]} ${parts[0]}`;
+                              return `${fullMonths[monthIdx]} ${parts[0]}`;
                             } catch (e) {
-                              tooltipLabel = `Bulan: ${item.date}`;
+                              return item.date;
                             }
-                          }
-                          return `${tooltipLabel}\nPemasukan: ${formatIDR(item.pemasukan)}\nPengeluaran: ${formatIDR(item.pengeluaran)}`;
-                        })()}</title>
-                      </g>
+                          })()}
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-emerald-400 mb-0.5">
+                          <span>Uang Masuk:</span>
+                          <span className="font-bold">{formatIDR(item.pemasukan)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-rose-400">
+                          <span>Uang Keluar:</span>
+                          <span className="font-bold">{formatIDR(item.pengeluaran)}</span>
+                        </div>
+                      </div>
                     );
-                  })}
-                </svg>
+                  })()
+                )}
 
                 {/* Legend */}
                 <div className="flex justify-center gap-6 mt-2 text-xs">
